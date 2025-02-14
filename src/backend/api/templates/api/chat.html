@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat with Claude</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        #chat-container {
+            height: calc(100vh - 200px);
+            overflow-y: auto;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .message {
+            margin-bottom: 20px;
+            position: relative;
+        }
+        .message-content {
+            padding: 12px 16px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+        .user-message .message-content {
+            background: #007AFF;
+            color: white;
+            margin-left: auto;
+        }
+        .assistant-message .message-content {
+            background: #F0F0F0;
+            color: black;
+        }
+        .message pre {
+            background: #f8f8f8;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .message code {
+            font-family: 'Menlo', monospace;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+        }
+        #message-input {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        button {
+            padding: 12px 24px;
+            background: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .rewind-button {
+            position: absolute;
+            top: 0;
+            right: 0;
+            padding: 4px 8px;
+            font-size: 12px;
+            background: #6c757d;
+            opacity: 0.8;
+        }
+        .thinking {
+            display: flex;
+            gap: 4px;
+            padding: 12px 16px;
+            color: #666;
+            font-style: italic;
+        }
+        .thinking span {
+            width: 8px;
+            height: 8px;
+            background: #666;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+        .thinking span:nth-child(2) { animation-delay: 0.2s; }
+        .thinking span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container"></div>
+    <div id="input-container">
+        <textarea id="message-input" placeholder="Type your message..." rows="3"></textarea>
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const messageInput = document.getElementById('message-input');
+        let ws;
+
+        // Configure marked with syntax highlighting
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    return hljs.highlight(code, { language: lang }).value;
+                }
+                return hljs.highlightAuto(code).value;
+            },
+        });
+
+        function connect() {
+            ws = new WebSocket(`ws://${window.location.host}/ws/chat/`);
+
+            ws.onmessage = function(e) {
+                const data = JSON.parse(e.data);
+
+                if (data.type === 'thinking.start') {
+                    showThinking();
+                }
+                else if (data.type === 'chat.message') {
+                    removeThinking();
+                    addMessage(data.content, data.metadata.role, data.metadata.can_rewind);
+                }
+                else if (data.type === 'chat.summarized') {
+                    // Clear messages and show summary
+                    chatContainer.innerHTML = '';
+                    addMessage("Previous conversation summary: " + data.content, 'assistant', false);
+                }
+                else if (data.type === 'chat.rewind') {
+                    // Remove all messages after the rewind point
+                    const messages = chatContainer.getElementsByClassName('message');
+                    while (messages.length > data.index + 1) {
+                        messages[messages.length - 1].remove();
+                    }
+                }
+            };
+
+            ws.onclose = function() {
+                setTimeout(connect, 1000);
+            };
+        }
+
+        function showThinking() {
+            removeThinking();
+            const thinking = document.createElement('div');
+            thinking.className = 'thinking';
+            thinking.innerHTML = 'Thinking<span></span><span></span><span></span>';
+            chatContainer.appendChild(thinking);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function removeThinking() {
+            const thinking = chatContainer.querySelector('.thinking');
+            if (thinking) {
+                thinking.remove();
+            }
+        }
+
+        function addMessage(content, role, canRewind) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}-message`;
+
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content';
+            messageContent.innerHTML = marked.parse(content);
+
+            if (canRewind) {
+                const rewindButton = document.createElement('button');
+                rewindButton.className = 'rewind-button';
+                rewindButton.textContent = 'Rewind to here';
+                rewindButton.onclick = () => rewindTo(messageDiv);
+                messageDiv.appendChild(rewindButton);
+            }
+
+            messageDiv.appendChild(messageContent);
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            // Apply syntax highlighting to code blocks
+            messageDiv.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightBlock(block);
+            });
+        }
+
+        function sendMessage() {
+            const content = messageInput.value.trim();
+            if (content && ws.readyState === WebSocket.OPEN) {
+                addMessage(content, 'user', false);
+                ws.send(JSON.stringify({
+                    type: 'chat.message',
+                    content: content
+                }));
+                messageInput.value = '';
+            }
+        }
+
+        function rewindTo(messageElement) {
+            const messages = Array.from(chatContainer.getElementsByClassName('message'));
+            const index = messages.indexOf(messageElement);
+            if (index !== -1) {
+                ws.send(JSON.stringify({
+                    type: 'chat.rewind',
+                    index: index
+                }));
+            }
+        }
+
+        // Handle Enter key to send message
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Initial connection
+        connect();
+    </script>
+</body>
+</html>

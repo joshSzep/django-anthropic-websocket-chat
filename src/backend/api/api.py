@@ -9,7 +9,7 @@ async def health(request):
     return {"status": "ok"}
 
 
-@api.get("/websocket-test", include_in_schema=False)
-def websocket_test(request):
-    """Serve the WebSocket test page."""
-    return render(request, "api/websocket_test.html")
+@api.get("/chat", include_in_schema=False)
+def chat(request):
+    """Serve the chat interface."""
+    return render(request, "api/chat.html")

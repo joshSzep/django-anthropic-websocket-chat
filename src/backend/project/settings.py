@@ -156,3 +156,5 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels.layers.InMemoryChannelLayer",
     },
 }
+
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
