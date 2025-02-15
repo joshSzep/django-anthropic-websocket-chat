@@ -64,8 +64,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.message_history.add_message(human_message)
 
             # Get AI response
-            response = await self.llm.apredict_messages(
-                messages=self.chat_history,  # type: ignore
+            response = await self.llm.ainvoke(
+                input=self.chat_history,  # type: ignore
             )
             self.chat_history.append(response)  # type: ignore
             self.message_history.add_message(response)
@@ -115,7 +115,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             content=f"{system_prompt}\n\nConversation to summarize:\n"
             + "\n".join(str(msg.content) for msg in self.chat_history[:-2])
         )
-        summary = await self.llm.apredict_messages(messages=[summary_msg])
+        summary = await self.llm.ainvoke(
+            input=[summary_msg],
+        )
 
         # Replace old history with summary
         self.chat_history = [
@@ -143,5 +145,4 @@ class ChatConsumer(AsyncWebsocketConsumer):
         estimated_tokens = total_chars / 4
         # Claude-3-opus-20240229 has a 200k context window
         # We'll summarize at 90% = 180k tokens
-        # return estimated_tokens > 180000
-        return estimated_tokens > 1000
+        return estimated_tokens > 180000
