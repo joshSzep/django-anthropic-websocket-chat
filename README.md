@@ -89,15 +89,20 @@ just migrate
 ### Start development server
 
 ```bash
-just serve
+just serve-dev  # Runs Django development server with daphne for WebSocket support
+# or
+just serve-prod  # Runs production server with gunicorn using uvicorn workers
 ```
+
+The development server uses `daphne` for better WebSocket support during development, while the production server uses `gunicorn` with uvicorn workers.
 
 ## Development Commands
 
 The project uses `just` for common development tasks:
 
 - `just install` - Install all dependencies
-- `just serve` - Start development server
+- `just serve-dev` - Start development server with daphne
+- `just serve-prod` - Start production server with gunicorn
 - `just test` - Run tests
 - `just lint` - Run linting
 - `just format` - Format code
