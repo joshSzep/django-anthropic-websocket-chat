@@ -13,3 +13,9 @@ async def health(request):
 def chat(request):
     """Serve the chat interface."""
     return render(request, "api/chat.html")
+
+
+@api.get("/story", include_in_schema=False)
+def story(request):
+    """Serve the story generator interface."""
+    return render(request, "api/story.html")

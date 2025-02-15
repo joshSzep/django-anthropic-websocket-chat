@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bedtime Story Generator</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        #story-container {
+            height: calc(100vh - 200px);
+            overflow-y: auto;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .message {
+            margin-bottom: 20px;
+            position: relative;
+        }
+        .message-content {
+            padding: 12px 16px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+        .user-message .message-content {
+            background: #007AFF;
+            color: white;
+            margin-left: auto;
+        }
+        .assistant-message .message-content {
+            background: #F0F0F0;
+            color: black;
+        }
+        .final-story {
+            background: #E8F5E9 !important;
+            border: 1px solid #81C784;
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+        }
+        #message-input {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        button {
+            padding: 12px 24px;
+            background: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .thinking {
+            display: flex;
+            gap: 4px;
+            padding: 12px 16px;
+            color: #666;
+            font-style: italic;
+        }
+        .thinking span {
+            width: 8px;
+            height: 8px;
+            background: #666;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+        .thinking span:nth-child(2) { animation-delay: 0.2s; }
+        .thinking span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="story-container"></div>
+    <div id="input-container">
+        <textarea id="message-input" placeholder="Type your message..." rows="3"></textarea>
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <script>
+        const storyContainer = document.getElementById('story-container');
+        const messageInput = document.getElementById('message-input');
+        let socket = null;
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            socket = new WebSocket(`${protocol}//${host}/ws/story/`);
+
+            socket.onmessage = function(e) {
+                const data = JSON.parse(e.data);
+                if (data.type === 'story.message') {
+                    removeThinking();
+                    addMessage(data.content, 'assistant', data.metadata.final_story);
+                }
+            };
+
+            socket.onclose = function(e) {
+                console.log('WebSocket connection closed');
+            };
+
+            socket.onerror = function(e) {
+                console.error('WebSocket error:', e);
+            };
+        }
+
+        function showThinking() {
+            const thinking = document.createElement('div');
+            thinking.className = 'thinking';
+            thinking.innerHTML = 'Thinking<span></span><span></span><span></span>';
+            storyContainer.appendChild(thinking);
+            storyContainer.scrollTop = storyContainer.scrollHeight;
+        }
+
+        function removeThinking() {
+            const thinking = document.querySelector('.thinking');
+            if (thinking) {
+                thinking.remove();
+            }
+        }
+
+        function addMessage(content, role, isFinalStory = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}-message`;
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = `message-content ${isFinalStory ? 'final-story' : ''}`;
+
+            // Use marked for Markdown rendering
+            contentDiv.innerHTML = marked.parse(content);
+
+            messageDiv.appendChild(contentDiv);
+            storyContainer.appendChild(messageDiv);
+            storyContainer.scrollTop = storyContainer.scrollHeight;
+
+            // Apply syntax highlighting to code blocks
+            document.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightBlock(block);
+            });
+        }
+
+        function sendMessage() {
+            const content = messageInput.value.trim();
+            if (content && socket) {
+                addMessage(content, 'user');
+                socket.send(JSON.stringify({
+                    type: 'story.message',
+                    content: content
+                }));
+                messageInput.value = '';
+                showThinking();
+            }
+        }
+
+        // Handle Enter key to send message
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Connect when the page loads
+        connect();
+    </script>
+</body>
+</html>
